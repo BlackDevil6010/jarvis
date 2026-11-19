@@ -189,7 +189,7 @@ class Database:
                     cursor.execute("""
                         INSERT INTO contacts (name, alias, phone, email, preferred_channel)
                         VALUES (?, ?, ?, ?, ?)
-                    """, ("The Boss", "boss,manager,chief,supervisor", "+1-555-0199", "boss@executive.corp", "phone"))
+                    """, ("The Boss", "boss,manager,chief,supervisor", "+91-8754251849", "boss@executive.corp", "phone"))
                     cursor.execute("""
                         INSERT INTO contacts (name, alias, phone, email, preferred_channel)
                         VALUES (?, ?, ?, ?, ?)

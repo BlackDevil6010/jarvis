@@ -47,7 +47,7 @@ def test_telephony_default_contacts_and_lookup(test_db):
     boss = telephony.get_contact("boss")
     assert boss is not None
     assert "boss" in boss["name"].lower() or "the boss" in boss["name"].lower()
-    assert boss["phone"] == "+1-555-0199"
+    assert boss["phone"] == "+91-8754251849"
 
 
 def test_telephony_call_boss_phone_link(test_db):
@@ -57,7 +57,7 @@ def test_telephony_call_boss_phone_link(test_db):
         res = telephony.call_contact("boss", channel="phone")
         assert res["success"] is True
         assert "The Boss" in res["message"]
-        assert "+1-555-0199" in res["message"]
+        assert "+91-8754251849" in res["message"]
         mock_open.assert_called_once()
         assert "tel:" in mock_open.call_args[0][0]
 
@@ -70,7 +70,7 @@ def test_telephony_call_boss_whatsapp(test_db):
         assert res["success"] is True
         assert res["channel"] == "whatsapp"
         mock_open.assert_called_once()
-        assert "wa.me/15550199" in mock_open.call_args[0][0]
+        assert "wa.me/918754251849" in mock_open.call_args[0][0]
 
 
 def test_telephony_set_custom_contact(test_db):
