@@ -191,6 +191,7 @@ class MainWindow(QMainWindow):
         self.dock.home_clicked.connect(lambda: self.switch_view(0))
         self.dock.mic_clicked.connect(self.on_voice_mic_clicked)
         self.dock.skills_clicked.connect(lambda: self.switch_view(1))
+        self.dock.phone_clicked.connect(lambda: self.execute_command("phone access"))
         self.dock.music_clicked.connect(lambda: self.execute_command("open spotify"))
         self.dock.apps_clicked.connect(lambda: self.execute_command("list apps"))
         self.dock.diagnostics_clicked.connect(lambda: self.execute_command("diagnostics"))

@@ -57,7 +57,7 @@ class MediaQuickDeck(QFrame):
 
         # Header
         header = QHBoxLayout()
-        title = QLabel("Media & Workflows", self)
+        title = QLabel("Tactical Quick Deck", self)
         title.setStyleSheet(f"font-size: 12px; font-weight: bold; color: {COLORS['cyan_glow']}; letter-spacing: 1px;")
         header.addWidget(title)
         header.addStretch()
@@ -67,17 +67,19 @@ class MediaQuickDeck(QFrame):
         header.addWidget(badge)
         layout.addLayout(header)
 
-        # 2x3 Grid of Tiles
+        # 2x4 Grid of Tiles
         grid = QGridLayout()
         grid.setSpacing(8)
 
         tiles = [
-            ("🎵 Spotify", "open spotify", 0, 0),
-            ("🌐 Browser", "open chrome", 0, 1),
-            ("💻 VS Code", "open code editor", 0, 2),
-            ("⚡ Skill Forge", "list skills", 1, 0),
-            ("🩺 Diagnostics", "show system info", 1, 1),
-            ("📁 Documents", "open folder documents", 1, 2),
+            ("📞 Call Boss", "call boss", 0, 0),
+            ("✉️ Check Emails", "check emails", 0, 1),
+            ("📱 Phone Link", "phone access", 0, 2),
+            ("⚡ Briefing", "daily briefing", 0, 3),
+            ("🎵 Spotify", "open spotify", 1, 0),
+            ("💻 VS Code", "open code editor", 1, 1),
+            ("🩺 Diagnostics", "show system info", 1, 2),
+            ("📝 Notes", "notes", 1, 3),
         ]
 
         for text, cmd, r, c in tiles:

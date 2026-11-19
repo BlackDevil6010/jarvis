@@ -643,6 +643,90 @@ class LocalNLUProvider(BaseAIProvider):
                     provider_name=self.get_provider_name()
                 )
 
+        # 10. Check for Phone Remote Access / Mobile Companion Intent
+        if any(w in query_lower for w in ["access through phone", "access from phone", "phone access", "mobile companion", "connect phone", "connect mobile", "phone server", "mobile link", "phone link", "qr code for phone", "mobile qr"]):
+            return AIResponse(
+                text="Initializing O.M.E.N. Mobile Companion Gateway...",
+                tool_calls=[ToolCall("phone_companion", {"action": "start"})],
+                is_conversational=False,
+                provider_name=self.get_provider_name()
+            )
+
+        # 11. Check for Calling Contacts / Speed Dial (e.g. "call the boss", "call boss", "call mom", "dial 555-0199")
+        call_match = re.search(r"\b(?:call|dial|phone|ring)\s+(?:the\s+)?([a-zA-Z0-9_\-\+]+(?:\s+[a-zA-Z0-9_\-\+]+)?)(?:\s+(?:on|via)\s+(whatsapp|teams|skype|phone))?\b", query_lower)
+        if call_match and not any(w in query_lower for w in ["api", "function", "tool", "method"]):
+            contact_target = call_match.group(1).strip()
+            channel = call_match.group(2) or ("whatsapp" if "whatsapp" in query_lower else "phone")
+            return AIResponse(
+                text=f"Initiating comm-link to {contact_target.title()}...",
+                tool_calls=[ToolCall("call_contact", {"contact_name": contact_target, "channel": channel})],
+                is_conversational=False,
+                provider_name=self.get_provider_name()
+            )
+
+        # 12. Check for Email Checking / Inbox Intent
+        if any(w in query_lower for w in ["check emails", "check the emails", "check email", "check my email", "check my emails", "read emails", "read my email", "show emails", "my emails", "unread emails", "inbox summary", "summarize emails", "summarize my emails", "check inbox"]):
+            sender_search = None
+            sender_match = re.search(r"emails?\s+from\s+([a-zA-Z0-9_]+)", query_lower)
+            if sender_match:
+                sender_search = sender_match.group(1).strip()
+            return AIResponse(
+                text="Scanning email inbox intelligence...",
+                tool_calls=[ToolCall("check_emails", {"unread_only": True, "sender": sender_search})],
+                is_conversational=False,
+                provider_name=self.get_provider_name()
+            )
+
+        # 13. Check for Sending Email
+        send_email_match = re.search(r"(?:send|draft|compose)\s+(?:an?\s+)?email\s+(?:to\s+([a-zA-Z0-9_@\.]+))?", query_lower)
+        if send_email_match:
+            recip = send_email_match.group(1) or "boss"
+            return AIResponse(
+                text=f"Preparing email draft for {recip}...",
+                tool_calls=[ToolCall("send_email", {"recipient": recip, "subject": "Update from O.M.E.N.", "body": "Please review this directive."})],
+                is_conversational=False,
+                provider_name=self.get_provider_name()
+            )
+
+        # 14. Check for Messaging Contact (WhatsApp / SMS)
+        msg_match = re.search(r"(?:send\s+a\s+)?(?:message|text|whatsapp)\s+([a-zA-Z0-9_]+)\s+(?:that\s+|to\s+say\s+)?(.+)", query_lower)
+        if msg_match and not any(w in query_lower for w in ["system", "audio", "mic"]):
+            target_person = msg_match.group(1).strip()
+            text_body = msg_match.group(2).strip()
+            return AIResponse(
+                text=f"Dispatching message to {target_person}...",
+                tool_calls=[ToolCall("message_contact", {"contact_name": target_person, "message": text_body, "channel": "whatsapp"})],
+                is_conversational=False,
+                provider_name=self.get_provider_name()
+            )
+
+        # 15. Check for Executive Daily Briefing
+        if any(w in query_lower for w in ["daily briefing", "morning briefing", "executive briefing", "give me a briefing", "brief me", "morning report", "status briefing"]):
+            return AIResponse(
+                text="Compiling O.M.E.N. executive morning intelligence briefing...",
+                tool_calls=[ToolCall("daily_briefing", {})],
+                is_conversational=False,
+                provider_name=self.get_provider_name()
+            )
+
+        # 16. Check for Notes / Memo Scratchpad
+        note_take_match = re.search(r"(?:take\s+a?\s*note|new\s+note|record\s+memo|note\s+down)\s*[:\-]?\s*(.+)", query_lower)
+        if note_take_match:
+            note_content = note_take_match.group(1).strip()
+            return AIResponse(
+                text="Recording memo in system scratchpad...",
+                tool_calls=[ToolCall("manage_notes", {"action": "create", "content": note_content})],
+                is_conversational=False,
+                provider_name=self.get_provider_name()
+            )
+        if any(w in query_lower for w in ["show notes", "show my notes", "list notes", "my notes", "scratchpad notes"]):
+            return AIResponse(
+                text="Retrieving recorded scratchpad notes...",
+                tool_calls=[ToolCall("manage_notes", {"action": "list"})],
+                is_conversational=False,
+                provider_name=self.get_provider_name()
+            )
+
         # 4. Check for Time & Date Intent
         if any(w in query_lower for w in ["what time", "current time", "what is the time", "time now"]):
             from datetime import datetime

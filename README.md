@@ -47,6 +47,24 @@ O.M.E.N. includes tightly integrated subsystems:
 - **Dry-Run (Test Preview)**: Simulates workflows safely without real-world side effects.
 - **Persistence**: Workflows, steps, and execution histories persist in SQLite (`data/jarvis.db`).
 
+### 9. Speed-Dial Comm-Link ("Call the Boss")
+- **Speed Dial & Contacts**: Direct voice-calling or messaging contacts like "The Boss" or "Mom" using Windows Phone Link (`tel:` protocol), WhatsApp Web/Desktop (`wa.me`), Microsoft Teams (`msteams:`), or Skype (`skype:`).
+- **Contact Management**: Add, lookup, and update contact phone numbers on the fly (e.g. `set contact boss phone +1234567890`).
+
+### 10. Intelligent Email Assistant
+- **Check Unread Emails**: Fetches and formats unread inbox summaries, sender queries (e.g. "any emails from boss"), or live IMAP connections (`IMAP_SERVER`, `IMAP_USER`, `IMAP_PASSWORD`).
+- **Draft & Dispatch**: Sends emails via SMTP or drafts them in the Windows Mail client via `mailto:`.
+
+### 11. Phone Remote Access Gateway (Mobile Companion)
+- **Wi-Fi Mobile Access**: Starts a local, lightweight HTTP server allowing any smartphone (iPhone/Android) on your local Wi-Fi network to connect to O.M.E.N.
+- **Phone HUD Web App**: Access live voice input through your phone microphone, one-touch buttons for "Call Boss", "Check Emails", "Lock PC", "Daily Briefing", and real-time PC telemetry.
+
+### 12. Executive Daily Briefing ("Good Morning Protocol")
+- **Tactical Daily Report**: Synthesizes local time, date, hardware diagnostics (CPU, RAM, uptime), unread email intelligence, and pending reminders into an executive report with spoken TTS briefing.
+
+### 13. Quick Notes & Voice Scratchpad
+- **Fast Thought Capture**: Instant memo capture to SQLite via directives like `take note <content>` or voice dictation, with listing and deletion tools.
+
 
 ---
 
@@ -150,6 +168,12 @@ You can also run and inspect skills directly through typed directives in the HUD
 
 | Typed Directive | Action |
 |---|---|
+| `call boss` / `call <contact>` | Speed-dials The Boss or specified contact via Windows Phone Link or WhatsApp |
+| `check emails` / `inbox` | Displays unread emails, urgent notifications, and summaries |
+| `daily briefing` / `briefing` | Delivers executive morning briefing (time, telemetry, inbox, reminders) |
+| `phone access` / `mobile` | Starts mobile companion Wi-Fi server with phone browser access |
+| `take note <text>` / `notes` | Captures quick memo or lists stored scratchpad notes |
+| `contacts` | Lists communications directory and phone numbers |
 | `list skills` / `skills` | Lists all saved skills, their step counts, and enabled status |
 | `run skill <name>` | Executes the named workflow live |
 | `test skill <name>` | Runs a dry-run preview of the workflow |
@@ -162,7 +186,7 @@ You can also run and inspect skills directly through typed directives in the HUD
 
 ## 🧪 Running Automated Tests
 
-Execute all 45 automated unit, integration, and UI tests using `pytest`:
+Execute all 90 automated unit, integration, and UI tests using `pytest`:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest -v

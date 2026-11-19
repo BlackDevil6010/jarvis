@@ -137,11 +137,108 @@ class Database:
                         status TEXT DEFAULT 'pending'
                     )
                 """)
+
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS contacts (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        name TEXT NOT NULL,
+                        alias TEXT DEFAULT '',
+                        phone TEXT DEFAULT '',
+                        email TEXT DEFAULT '',
+                        preferred_channel TEXT DEFAULT 'phone'
+                    )
+                """)
+
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS emails (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        sender TEXT NOT NULL,
+                        recipient TEXT NOT NULL,
+                        subject TEXT NOT NULL,
+                        body TEXT NOT NULL,
+                        received_timestamp REAL NOT NULL,
+                        is_read INTEGER DEFAULT 0,
+                        is_starred INTEGER DEFAULT 0
+                    )
+                """)
+
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS notes (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        title TEXT DEFAULT '',
+                        content TEXT NOT NULL,
+                        created_timestamp REAL NOT NULL
+                    )
+                """)
         finally:
             conn.close()
 
         # Seed defaults if applications table is missing any
         self._seed_default_apps()
+        self._seed_default_contacts()
+        self._seed_default_emails()
+
+    def _seed_default_contacts(self) -> None:
+        """Seed initial contacts (e.g. The Boss, Mom) if contacts table is empty."""
+        conn = self.get_connection()
+        try:
+            with conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT COUNT(*) FROM contacts")
+                if cursor.fetchone()[0] == 0:
+                    cursor.execute("""
+                        INSERT INTO contacts (name, alias, phone, email, preferred_channel)
+                        VALUES (?, ?, ?, ?, ?)
+                    """, ("The Boss", "boss,manager,chief,supervisor", "+1-555-0199", "boss@executive.corp", "phone"))
+                    cursor.execute("""
+                        INSERT INTO contacts (name, alias, phone, email, preferred_channel)
+                        VALUES (?, ?, ?, ?, ?)
+                    """, ("Mom", "mom,mother", "+1-555-0142", "mom@family.home", "phone"))
+        finally:
+            conn.close()
+
+    def _seed_default_emails(self) -> None:
+        """Seed sample unread inbox emails if emails table is empty."""
+        import time
+        conn = self.get_connection()
+        try:
+            with conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT COUNT(*) FROM emails")
+                if cursor.fetchone()[0] == 0:
+                    now = time.time()
+                    cursor.execute("""
+                        INSERT INTO emails (sender, recipient, subject, body, received_timestamp, is_read, is_starred)
+                        VALUES (?, ?, ?, ?, ?, 0, 1)
+                    """, (
+                        "The Boss <boss@executive.corp>",
+                        "you@omen.ai",
+                        "URGENT: Q4 Strategic Roadmaps & Deployment",
+                        "Good morning. Please review the updated Q4 sprint metrics and deployment status before our executive call today. Call me once you have inspected the logs.",
+                        now - 1800
+                    ))
+                    cursor.execute("""
+                        INSERT INTO emails (sender, recipient, subject, body, received_timestamp, is_read, is_starred)
+                        VALUES (?, ?, ?, ?, ?, 0, 0)
+                    """, (
+                        "GitHub Notifications <notifications@github.com>",
+                        "you@omen.ai",
+                        "Security Alert: Dependency security update available",
+                        "Dependabot detected 1 security advisory in your workspace repository. Automatic patch branches have been prepared.",
+                        now - 7200
+                    ))
+                    cursor.execute("""
+                        INSERT INTO emails (sender, recipient, subject, body, received_timestamp, is_read, is_starred)
+                        VALUES (?, ?, ?, ?, ?, 0, 0)
+                    """, (
+                        "Tech Radar <newsletter@techradar.io>",
+                        "you@omen.ai",
+                        "Daily Brief: Autonomous AI Desktop Systems in 2026",
+                        "Tactical multimodal desktop assistants and mobile companion gateways are seeing unprecedented adoption across engineering teams worldwide.",
+                        now - 14400
+                    ))
+        finally:
+            conn.close()
 
     def _seed_default_apps(self) -> None:
         """Populate default applications if not already registered."""
@@ -309,5 +406,159 @@ class Database:
             with conn:
                 cursor = conn.cursor()
                 cursor.execute("UPDATE reminders SET status = 'completed' WHERE id = ?", (reminder_id,))
+        finally:
+            conn.close()
+
+    # --- Contacts Methods ---
+    def get_all_contacts(self) -> List[Dict[str, Any]]:
+        """Retrieve all registered contacts."""
+        conn = self.get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM contacts ORDER BY name ASC")
+            return [dict(row) for row in cursor.fetchall()]
+        finally:
+            conn.close()
+
+    def get_contact_by_query(self, query: str) -> Optional[Dict[str, Any]]:
+        """Look up contact by name, nickname, or alias (e.g. 'boss', 'The Boss', 'Mom')."""
+        clean_q = query.strip().lower()
+        if not clean_q:
+            return None
+        contacts = self.get_all_contacts()
+        # Direct name match
+        for c in contacts:
+            if c["name"].lower() == clean_q:
+                return c
+        # Alias match
+        for c in contacts:
+            aliases = [a.strip().lower() for a in (c["alias"] or "").split(",") if a.strip()]
+            if clean_q in aliases or any(a in clean_q for a in aliases):
+                return c
+        # Substring name match
+        for c in contacts:
+            if clean_q in c["name"].lower():
+                return c
+        return None
+
+    def upsert_contact(self, name: str, phone: str = "", alias: str = "", email: str = "", preferred_channel: str = "phone") -> int:
+        """Add or update contact information."""
+        conn = self.get_connection()
+        try:
+            with conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT id FROM contacts WHERE LOWER(name) = LOWER(?)", (name,))
+                row = cursor.fetchone()
+                if row:
+                    cid = row[0]
+                    cursor.execute("""
+                        UPDATE contacts
+                        SET phone = COALESCE(NULLIF(?, ''), phone),
+                            alias = COALESCE(NULLIF(?, ''), alias),
+                            email = COALESCE(NULLIF(?, ''), email),
+                            preferred_channel = ?
+                        WHERE id = ?
+                    """, (phone, alias, email, preferred_channel, cid))
+                    return cid
+                else:
+                    cursor.execute("""
+                        INSERT INTO contacts (name, alias, phone, email, preferred_channel)
+                        VALUES (?, ?, ?, ?, ?)
+                    """, (name, alias, phone, email, preferred_channel))
+                    return cursor.lastrowid
+        finally:
+            conn.close()
+
+    def delete_contact(self, contact_id: int) -> bool:
+        """Delete a contact by ID."""
+        conn = self.get_connection()
+        try:
+            with conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM contacts WHERE id = ?", (contact_id,))
+                return cursor.rowcount > 0
+        finally:
+            conn.close()
+
+    # --- Emails Methods ---
+    def get_emails(self, unread_only: bool = False, sender_filter: str = "", limit: int = 5) -> List[Dict[str, Any]]:
+        """Retrieve stored emails, optionally filtered by read status or sender."""
+        conn = self.get_connection()
+        try:
+            cursor = conn.cursor()
+            sql = "SELECT * FROM emails WHERE 1=1"
+            params = []
+            if unread_only:
+                sql += " AND is_read = 0"
+            if sender_filter:
+                sql += " AND (LOWER(sender) LIKE ? OR LOWER(subject) LIKE ?)"
+                pattern = f"%{sender_filter.lower()}%"
+                params.extend([pattern, pattern])
+            sql += " ORDER BY received_timestamp DESC LIMIT ?"
+            params.append(limit)
+            cursor.execute(sql, tuple(params))
+            return [dict(row) for row in cursor.fetchall()]
+        finally:
+            conn.close()
+
+    def add_email(self, sender: str, recipient: str, subject: str, body: str, is_read: bool = False, is_starred: bool = False) -> int:
+        """Save a new incoming or drafted/sent email."""
+        import time
+        conn = self.get_connection()
+        try:
+            with conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT INTO emails (sender, recipient, subject, body, received_timestamp, is_read, is_starred)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (sender, recipient, subject, body, time.time(), 1 if is_read else 0, 1 if is_starred else 0))
+                return cursor.lastrowid
+        finally:
+            conn.close()
+
+    def mark_email_read(self, email_id: int) -> None:
+        """Mark an email as read."""
+        conn = self.get_connection()
+        try:
+            with conn:
+                cursor = conn.cursor()
+                cursor.execute("UPDATE emails SET is_read = 1 WHERE id = ?", (email_id,))
+        finally:
+            conn.close()
+
+    # --- Notes Methods ---
+    def add_note(self, content: str, title: str = "") -> int:
+        """Store a quick note or memo."""
+        import time
+        conn = self.get_connection()
+        try:
+            with conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT INTO notes (title, content, created_timestamp)
+                    VALUES (?, ?, ?)
+                """, (title or "Quick Memo", content, time.time()))
+                return cursor.lastrowid
+        finally:
+            conn.close()
+
+    def get_all_notes(self, limit: int = 10) -> List[Dict[str, Any]]:
+        """Retrieve stored notes ordered by recent creation."""
+        conn = self.get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM notes ORDER BY created_timestamp DESC LIMIT ?", (limit,))
+            return [dict(row) for row in cursor.fetchall()]
+        finally:
+            conn.close()
+
+    def delete_note(self, note_id: int) -> bool:
+        """Delete note by ID."""
+        conn = self.get_connection()
+        try:
+            with conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM notes WHERE id = ?", (note_id,))
+                return cursor.rowcount > 0
         finally:
             conn.close()

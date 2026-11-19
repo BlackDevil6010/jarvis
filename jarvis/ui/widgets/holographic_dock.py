@@ -22,6 +22,7 @@ class HolographicDock(QFrame):
     apps_clicked = Signal()
     diagnostics_clicked = Signal()
     settings_clicked = Signal()
+    phone_clicked = Signal()
 
     def __init__(self, parent: QWidget = None):
         super().__init__(parent)
@@ -113,7 +114,14 @@ class HolographicDock(QFrame):
         self.btn_diag.setToolTip("System Telemetry Diagnostics")
         self.btn_diag.clicked.connect(self.diagnostics_clicked.emit)
 
-        # 7. Settings / Keys
+        # 7. Phone Mobile Companion
+        self.btn_phone = QPushButton("📱", self)
+        self.btn_phone.setProperty("class", "DockBtn")
+        self.btn_phone.setFixedSize(40, 40)
+        self.btn_phone.setToolTip("O.M.E.N. Mobile Companion Gateway")
+        self.btn_phone.clicked.connect(self.phone_clicked.emit)
+
+        # 8. Settings / Keys
         self.btn_settings = QPushButton("⚙", self)
         self.btn_settings.setProperty("class", "DockBtn")
         self.btn_settings.setFixedSize(40, 40)
@@ -124,6 +132,7 @@ class HolographicDock(QFrame):
         layout.addWidget(self.btn_music)
         layout.addWidget(self.btn_mic)
         layout.addWidget(self.btn_skills)
+        layout.addWidget(self.btn_phone)
         layout.addWidget(self.btn_apps)
         layout.addWidget(self.btn_diag)
         layout.addWidget(self.btn_settings)

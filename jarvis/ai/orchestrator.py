@@ -28,6 +28,13 @@ Your directives:
 11. When the user asks to look at their screen or explain what is on the screen, call the analyze_screen tool.
 12. When the user asks to lock their PC or show desktop/minimize all windows, call the windows_automation tool.
 13. When the user asks to find or locate a file on their computer, call the find_files tool.
+14. When the user asks to check their emails, read emails, or search for emails (e.g. "check my emails", "any emails from boss", "summarize unread emails"), call the check_emails tool.
+15. When the user asks to send or draft an email, call the send_email tool.
+16. When the user asks to call someone or speed-dial a contact (e.g. "call the boss", "call boss", "call mom", "dial 555-0199", "call boss on whatsapp"), call the call_contact tool with contact_name and optional channel.
+17. When the user asks to message a contact on WhatsApp or SMS, call the message_contact tool.
+18. When the user asks to access or connect through their phone or mobile companion (e.g. "access through phone", "phone access", "mobile link", "connect mobile"), call the phone_companion tool.
+19. When the user asks for a daily or morning briefing (e.g. "give me a briefing", "daily briefing", "morning briefing"), call the daily_briefing tool.
+20. When the user asks to take a note, record a voice memo, or view notes (e.g. "take a note: ...", "show notes"), call the manage_notes tool.
 """
 
 

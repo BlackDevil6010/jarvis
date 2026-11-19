@@ -86,6 +86,7 @@ class ToolRegistry:
         self.launcher = launcher or AppLauncher(self.db)
         self.skill_storage = SkillStorage(self.db)
         self.skill_engine = SkillExecutionEngine(self.skill_storage, self.launcher)
+        self._mobile_server: Optional[Any] = None
         self._tools: Dict[str, ToolDefinition] = {}
         self._register_default_tools()
 
@@ -377,6 +378,187 @@ class ToolRegistry:
                 }
             },
             handler=self._tool_analyze_screen
+        ))
+
+        # 18. Check & Search Emails
+        self.register_tool(ToolDefinition(
+            name="check_emails",
+            description="Check for unread or recent emails in the inbox, or search emails by sender (e.g. 'check my emails', 'any emails from boss', 'summarize my unread emails').",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "unread_only": {
+                        "type": "boolean",
+                        "description": "Whether to fetch only unread messages (default True)."
+                    },
+                    "sender": {
+                        "type": "string",
+                        "description": "Filter by sender name or email keyword (e.g. 'boss', 'github')."
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of emails to retrieve (default 5)."
+                    }
+                }
+            },
+            handler=self._tool_check_emails
+        ))
+
+        # 19. Send / Draft Email
+        self.register_tool(ToolDefinition(
+            name="send_email",
+            description="Send or draft an email to a recipient or contact (e.g. 'email boss', 'send email to boss with subject ... and body ...'). Transmits via SMTP or opens in Windows Mail.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "recipient": {
+                        "type": "string",
+                        "description": "Recipient email address or contact alias (e.g. 'boss', 'john@example.com')."
+                    },
+                    "subject": {
+                        "type": "string",
+                        "description": "Subject line of the email."
+                    },
+                    "body": {
+                        "type": "string",
+                        "description": "Body content of the email."
+                    }
+                },
+                "required": ["recipient", "subject", "body"]
+            },
+            handler=self._tool_send_email
+        ))
+
+        # 20. Call Contact / Speed Dial (Call Boss)
+        self.register_tool(ToolDefinition(
+            name="call_contact",
+            description="Speed-dial or voice call a contact (such as 'boss', 'mom') or a phone number via Windows Phone Link (tel: protocol), WhatsApp, Teams, or Skype (e.g. 'call the boss', 'call boss on whatsapp', 'dial 555-0199').",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "contact_name": {
+                        "type": "string",
+                        "description": "Name or alias of the person to call (e.g. 'boss', 'the boss', 'mom', or a phone number)."
+                    },
+                    "channel": {
+                        "type": "string",
+                        "description": "Calling channel: 'phone' (default, uses Windows Phone Link), 'whatsapp', 'teams', 'skype'."
+                    },
+                    "phone_number": {
+                        "type": "string",
+                        "description": "Optional direct phone number override."
+                    }
+                },
+                "required": ["contact_name"]
+            },
+            handler=self._tool_call_contact
+        ))
+
+        # 21. Message Contact (WhatsApp / SMS)
+        self.register_tool(ToolDefinition(
+            name="message_contact",
+            description="Send a message to a contact via WhatsApp or default messenger (e.g. 'message boss that I am ready', 'whatsapp mom').",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "contact_name": {
+                        "type": "string",
+                        "description": "Name or alias of the contact (e.g. 'boss', 'mom')."
+                    },
+                    "message": {
+                        "type": "string",
+                        "description": "The message text to transmit."
+                    },
+                    "channel": {
+                        "type": "string",
+                        "description": "Messaging channel: 'whatsapp' (default) or 'sms'."
+                    }
+                },
+                "required": ["contact_name", "message"]
+            },
+            handler=self._tool_message_contact
+        ))
+
+        # 22. Manage Contacts Directory
+        self.register_tool(ToolDefinition(
+            name="manage_contacts",
+            description="View, register, or update contacts in the O.M.E.N. speed dial directory (e.g. 'list contacts', 'set contact boss phone +1234567890').",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "description": "Action: 'list', 'get', 'set', 'delete'."
+                    },
+                    "name": {
+                        "type": "string",
+                        "description": "Contact name (e.g. 'The Boss', 'Mom', 'Alex')."
+                    },
+                    "phone": {
+                        "type": "string",
+                        "description": "Phone number."
+                    },
+                    "alias": {
+                        "type": "string",
+                        "description": "Aliases or nicknames (e.g. 'boss,chief,manager')."
+                    },
+                    "email": {
+                        "type": "string",
+                        "description": "Email address."
+                    }
+                },
+                "required": ["action"]
+            },
+            handler=self._tool_manage_contacts
+        ))
+
+        # 23. Phone Remote Access Gateway
+        self.register_tool(ToolDefinition(
+            name="phone_companion",
+            description="Start or get the link and QR pairing information for the O.M.E.N. Mobile Companion, allowing phone browser access over Wi-Fi (e.g. 'access through phone', 'phone access', 'mobile companion').",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "description": "Action: 'start' (default), 'status', 'url'."
+                    }
+                }
+            },
+            handler=self._tool_phone_companion
+        ))
+
+        # 24. Executive Daily Briefing
+        self.register_tool(ToolDefinition(
+            name="daily_briefing",
+            description="Compile and deliver an executive daily morning briefing covering time, system telemetry, unread emails, and pending reminders (e.g. 'give me a morning briefing', 'daily briefing', 'brief me').",
+            parameters={"type": "object", "properties": {}},
+            handler=self._tool_daily_briefing
+        ))
+
+        # 25. Quick Notes & Voice Scratchpad
+        self.register_tool(ToolDefinition(
+            name="manage_notes",
+            description="Take, list, or delete quick notes and voice memos in the scratchpad (e.g. 'take a note: call boss at 4', 'show notes', 'delete note 1').",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "description": "Action: 'create', 'list', 'delete'."
+                    },
+                    "content": {
+                        "type": "string",
+                        "description": "Note content for 'create'."
+                    },
+                    "note_id": {
+                        "type": "integer",
+                        "description": "Note ID for 'delete'."
+                    }
+                },
+                "required": ["action"]
+            },
+            handler=self._tool_manage_notes
         ))
 
     def register_tool(self, tool: ToolDefinition) -> None:
@@ -902,3 +1084,205 @@ class ToolRegistry:
             )
         except Exception as exc:
             return ToolResult(success=False, message=f"Screen inspection failed: {exc}", tool_name="analyze_screen")
+
+    # 18. Check & Search Emails
+    def _tool_check_emails(
+        self,
+        unread_only: bool = True,
+        sender: Optional[str] = None,
+        limit: int = 5
+    ) -> ToolResult:
+        try:
+            from jarvis.core.email_assistant import EmailAssistant
+            assistant = EmailAssistant(self.db)
+            summary = assistant.check_unread_summary(sender_filter=sender or "")
+            return ToolResult(
+                success=True,
+                message=summary["formatted_report"],
+                tool_name="check_emails",
+                data=summary
+            )
+        except Exception as exc:
+            return ToolResult(success=False, message=f"Failed to check inbox: {exc}", tool_name="check_emails")
+
+    # 19. Send / Draft Email
+    def _tool_send_email(self, recipient: str, subject: str, body: str) -> ToolResult:
+        try:
+            from jarvis.core.email_assistant import EmailAssistant
+            assistant = EmailAssistant(self.db)
+            res = assistant.send_email(recipient=recipient, subject=subject, body=body)
+            return ToolResult(
+                success=res.get("success", True),
+                message=res["message"],
+                tool_name="send_email",
+                data=res
+            )
+        except Exception as exc:
+            return ToolResult(success=False, message=f"Failed to send email: {exc}", tool_name="send_email")
+
+    # 20. Call Contact (Call the Boss)
+    def _tool_call_contact(
+        self,
+        contact_name: str,
+        channel: str = "phone",
+        phone_number: Optional[str] = None
+    ) -> ToolResult:
+        try:
+            from jarvis.core.telephony import TelephonyManager
+            telephony = TelephonyManager(self.db)
+            res = telephony.call_contact(target=contact_name, channel=channel, custom_phone=phone_number)
+            return ToolResult(
+                success=res["success"],
+                message=res["message"],
+                tool_name="call_contact",
+                data=res
+            )
+        except Exception as exc:
+            return ToolResult(success=False, message=f"Calling error: {exc}", tool_name="call_contact")
+
+    # 21. Message Contact (WhatsApp / SMS)
+    def _tool_message_contact(
+        self,
+        contact_name: str,
+        message: str,
+        channel: str = "whatsapp"
+    ) -> ToolResult:
+        try:
+            from jarvis.core.telephony import TelephonyManager
+            telephony = TelephonyManager(self.db)
+            res = telephony.message_contact(target=contact_name, message=message, channel=channel)
+            return ToolResult(
+                success=res["success"],
+                message=res["message"],
+                tool_name="message_contact",
+                data=res
+            )
+        except Exception as exc:
+            return ToolResult(success=False, message=f"Messaging error: {exc}", tool_name="message_contact")
+
+    # 22. Manage Contacts Directory
+    def _tool_manage_contacts(
+        self,
+        action: str,
+        name: Optional[str] = None,
+        phone: Optional[str] = None,
+        alias: Optional[str] = None,
+        email: Optional[str] = None
+    ) -> ToolResult:
+        try:
+            from jarvis.core.telephony import TelephonyManager
+            telephony = TelephonyManager(self.db)
+            act = action.lower().strip()
+
+            if act in ["list", "show", "all"]:
+                contacts = telephony.list_contacts()
+                if not contacts:
+                    return ToolResult(success=True, message="No contacts registered in communications directory.", tool_name="manage_contacts")
+                lines = [f"COMMUNICATIONS DIRECTORY ({len(contacts)} contacts):"]
+                for c in contacts:
+                    aliases = f" (Aliases: {c['alias']})" if c.get('alias') else ""
+                    lines.append(f" • {c['name']:<16} | Phone: {c.get('phone') or 'N/A'}{aliases} | Channel: {c.get('preferred_channel')}")
+                return ToolResult(success=True, message="\n".join(lines), tool_name="manage_contacts", data={"contacts": contacts})
+
+            elif act in ["set", "add", "update", "create"]:
+                if not name:
+                    return ToolResult(success=False, message="Must specify contact name to register.", tool_name="manage_contacts")
+                res = telephony.set_contact(name=name, phone=phone or "", alias=alias or "", email=email or "")
+                return ToolResult(success=res["success"], message=res["message"], tool_name="manage_contacts")
+
+            elif act == "get":
+                if not name:
+                    return ToolResult(success=False, message="Must specify name to look up.", tool_name="manage_contacts")
+                c = telephony.get_contact(name)
+                if not c:
+                    return ToolResult(success=False, message=f"Contact '{name}' not found.", tool_name="manage_contacts")
+                msg = f"CONTACT DETAILS: {c['name']} (Phone: {c.get('phone')}, Email: {c.get('email')}, Preferred: {c.get('preferred_channel')})"
+                return ToolResult(success=True, message=msg, tool_name="manage_contacts", data=c)
+
+            else:
+                return ToolResult(success=False, message=f"Unknown contact action '{action}'.", tool_name="manage_contacts")
+        except Exception as exc:
+            return ToolResult(success=False, message=f"Contact directory operation failed: {exc}", tool_name="manage_contacts")
+
+    # 23. Phone Remote Access Gateway
+    def _tool_phone_companion(self, action: str = "start") -> ToolResult:
+        try:
+            from jarvis.core.remote_gateway import MobileCompanionServer
+            if not self._mobile_server:
+                self._mobile_server = MobileCompanionServer()
+
+            act = (action or "start").lower().strip()
+            if act in ["start", "online", "launch"]:
+                res = self._mobile_server.start()
+                url = self._mobile_server.get_access_url()
+                return ToolResult(
+                    success=res["success"],
+                    message=(
+                        f"MOBILE COMPANION ONLINE:\n"
+                        f" • URL: {url}\n"
+                        f" • Wi-Fi Gateway: Active\n"
+                        f"Open the URL on your phone's browser to access O.M.E.N. remotely (Voice mic, Call Boss, Check Emails, Telemetry)."
+                    ),
+                    tool_name="phone_companion",
+                    data={"url": url}
+                )
+            elif act in ["status", "check"]:
+                url = self._mobile_server.get_access_url()
+                running = self._mobile_server.is_running
+                status_str = "ONLINE" if running else "STANDBY"
+                return ToolResult(
+                    success=True,
+                    message=f"Mobile Companion Status: [{status_str}] at {url}",
+                    tool_name="phone_companion",
+                    data={"status": status_str, "url": url}
+                )
+            else:
+                url = self._mobile_server.get_access_url()
+                return ToolResult(success=True, message=f"Mobile Companion URL: {url}", tool_name="phone_companion")
+        except Exception as exc:
+            return ToolResult(success=False, message=f"Mobile companion failed: {exc}", tool_name="phone_companion")
+
+    # 24. Executive Daily Briefing
+    def _tool_daily_briefing(self) -> ToolResult:
+        try:
+            from jarvis.core.briefing import BriefingManager
+            mgr = BriefingManager(self.db)
+            report = mgr.generate_briefing()
+            return ToolResult(
+                success=True,
+                message=report["report_text"],
+                tool_name="daily_briefing",
+                data=report
+            )
+        except Exception as exc:
+            return ToolResult(success=False, message=f"Briefing generation failed: {exc}", tool_name="daily_briefing")
+
+    # 25. Quick Notes & Voice Scratchpad
+    def _tool_manage_notes(
+        self,
+        action: str,
+        content: Optional[str] = None,
+        note_id: Optional[int] = None
+    ) -> ToolResult:
+        try:
+            from jarvis.core.notes import NotesManager
+            mgr = NotesManager(self.db)
+            act = action.lower().strip()
+
+            if act in ["create", "add", "take", "new"]:
+                if not content:
+                    return ToolResult(success=False, message="Note content cannot be empty.", tool_name="manage_notes")
+                res = mgr.add_note(content)
+                return ToolResult(success=res["success"], message=res["message"], tool_name="manage_notes", data=res)
+            elif act in ["list", "show", "all"]:
+                res = mgr.list_notes()
+                return ToolResult(success=True, message=res["message"], tool_name="manage_notes", data=res)
+            elif act in ["delete", "remove", "purge"]:
+                if not note_id:
+                    return ToolResult(success=False, message="Must specify note ID to delete.", tool_name="manage_notes")
+                res = mgr.delete_note(note_id)
+                return ToolResult(success=res["success"], message=res["message"], tool_name="manage_notes")
+            else:
+                return ToolResult(success=False, message=f"Unknown notes action '{action}'.", tool_name="manage_notes")
+        except Exception as exc:
+            return ToolResult(success=False, message=f"Notes operation failed: {exc}", tool_name="manage_notes")

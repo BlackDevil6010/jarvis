@@ -91,6 +91,10 @@ class CommandProcessor:
                 f"O.M.E.N. DIRECTIVES & PROTOCOLS [Active AI: {prov_name}]:\n"
                 " • Natural Language       : Ask questions or describe tasks in plain English\n"
                 "                           (e.g., 'Can you open my code editor?', 'Explain Python TypeError')\n"
+                " • Call <Contact>         : Speed-dial (e.g., 'Call Boss', 'Call Mom', 'Call Boss on WhatsApp')\n"
+                " • Check Emails           : Inspect unread inbox intelligence and messages from Boss\n"
+                " • Daily Briefing         : Executive morning briefing (time, telemetry, inbox, reminders)\n"
+                " • Phone Access           : Launch mobile companion gateway with QR pairing for smartphone\n"
                 " • Open <Application>     : Launch any application (e.g., 'Open Spotify', 'Launch Discord', 'Open Chrome')\n"
                 " • Show system information: Display hardware telemetry, memory, and CPU metrics\n"
                 " • List apps              : Display discovered and registered applications\n"
@@ -98,6 +102,8 @@ class CommandProcessor:
                 " • Run skill <name>       : Execute an automated workflow by name\n"
                 " • Test skill <name>      : Dry-run simulate a workflow without side-effects\n"
                 " • Test mic               : Run microphone hardware health check & diagnostics\n"
+                " • Take note <text>       : Record a quick voice memo or idea to scratchpad\n"
+                " • Contacts               : List or configure speed-dial communications directory\n"
                 " • Set key <gemini|openai>: Configure AI provider API key securely\n"
                 " • Status                 : Check system health and active AI intelligence engine\n"
                 " • Clear                  : Flush console display"
@@ -256,7 +262,87 @@ class CommandProcessor:
                 action_type="info"
             )
 
-        # 12. Direct application launcher commands (e.g., 'Open Notepad', 'Open Chrome', 'notepad')
+        # 12. Phone Remote Access Gateway (Mobile Companion)
+        if cmd_lower in ["phone access", "mobile companion", "phone", "mobile", "phone link", "qr code", "mobile link", "start mobile server"]:
+            if not self.tool_registry._mobile_server:
+                from jarvis.core.remote_gateway import MobileCompanionServer
+                self.tool_registry._mobile_server = MobileCompanionServer(command_processor=self)
+            else:
+                self.tool_registry._mobile_server.command_processor = self
+            res = self.tool_registry._mobile_server.start()
+            url = self.tool_registry._mobile_server.get_access_url()
+            out_text = (
+                f"MOBILE COMPANION ONLINE:\n"
+                f" • Connect Phone Browser: {url}\n"
+                f" • Directives Supported : Voice Mic, 'Call Boss', 'Check Emails', 'Lock PC', Telemetry\n"
+                f"Open the link above in your mobile browser (Safari/Chrome) to control O.M.E.N. from your phone."
+            )
+            self.db.record_command(cmd, "SUCCESS_MOBILE")
+            return CommandResponse(text=out_text, success=True, action_type="launch", metadata={"url": url})
+
+        # 13. Calling Directives (Speed-Dial: Call Boss, Call Mom, Dial)
+        call_match = re.match(r"^(?:call|dial|phone\s+contact)\s+(?:the\s+)?([a-zA-Z0-9_\-\+]+(?:\s+[a-zA-Z0-9_\-\+]+)?)(?:\s+(?:on|via)\s+(whatsapp|teams|skype|phone))?$", cmd, re.IGNORECASE)
+        if call_match:
+            target_name = call_match.group(1).strip()
+            ch = call_match.group(2) or ("whatsapp" if "whatsapp" in cmd_lower else "phone")
+            from jarvis.core.telephony import TelephonyManager
+            telephony = TelephonyManager(self.db)
+            res = telephony.call_contact(target=target_name, channel=ch)
+            self.db.record_command(cmd, "SUCCESS_CALL" if res["success"] else "FAILED_CALL")
+            return CommandResponse(text=res["message"], success=res["success"], action_type="launch" if res["success"] else "error", metadata=res)
+
+        # 14. Email Directives (Check emails, inbox)
+        if cmd_lower in ["check emails", "check the emails", "emails", "inbox", "check inbox", "check my emails", "read emails", "unread emails"]:
+            from jarvis.core.email_assistant import EmailAssistant
+            assistant = EmailAssistant(self.db)
+            summary = assistant.check_unread_summary()
+            self.db.record_command(cmd, "SUCCESS_EMAIL")
+            return CommandResponse(text=summary["formatted_report"], success=True, action_type="info", metadata=summary)
+
+        # 15. Executive Daily Briefing
+        if cmd_lower in ["daily briefing", "morning briefing", "executive briefing", "briefing", "brief me", "morning report"]:
+            from jarvis.core.briefing import BriefingManager
+            mgr = BriefingManager(self.db)
+            briefing = mgr.generate_briefing()
+            self.db.record_command(cmd, "SUCCESS_BRIEFING")
+            return CommandResponse(text=briefing["report_text"], success=True, action_type="info", metadata=briefing)
+
+        # 16. Quick Notes Directives
+        note_match = re.match(r"^(?:take\s+a?\s*note|new\s+note|record\s+memo|note\s+down)\s*[:\-]?\s*(.+)$", cmd, re.IGNORECASE)
+        if note_match:
+            from jarvis.core.notes import NotesManager
+            mgr = NotesManager(self.db)
+            res = mgr.add_note(note_match.group(1).strip())
+            self.db.record_command(cmd, "SUCCESS_NOTE")
+            return CommandResponse(text=res["message"], success=res["success"], action_type="info", metadata=res)
+        if cmd_lower in ["notes", "show notes", "list notes", "my notes"]:
+            from jarvis.core.notes import NotesManager
+            mgr = NotesManager(self.db)
+            res = mgr.list_notes()
+            return CommandResponse(text=res["message"], success=True, action_type="info", metadata=res)
+
+        # 17. Contacts Directory Directives
+        if cmd_lower in ["contacts", "list contacts", "show contacts"]:
+            from jarvis.core.telephony import TelephonyManager
+            telephony = TelephonyManager(self.db)
+            contacts = telephony.list_contacts()
+            lines = [f"COMMUNICATIONS DIRECTORY ({len(contacts)} contacts):"]
+            for c in contacts:
+                aliases = f" (Aliases: {c['alias']})" if c.get('alias') else ""
+                lines.append(f" • {c['name']:<16} | Phone: {c.get('phone') or 'N/A'}{aliases} | Channel: {c.get('preferred_channel')}")
+            lines.append("\nTip: Type 'call <name>' or 'call boss' to speed dial, or 'set contact <name> phone <num>' to update.")
+            return CommandResponse(text="\n".join(lines), success=True, action_type="info")
+
+        set_contact_match = re.match(r"^set\s+contact\s+([a-zA-Z0-9_]+)\s+phone\s+([\+\d\-\(\)\s]+)$", cmd, re.IGNORECASE)
+        if set_contact_match:
+            c_name = set_contact_match.group(1).strip()
+            c_phone = set_contact_match.group(2).strip()
+            from jarvis.core.telephony import TelephonyManager
+            telephony = TelephonyManager(self.db)
+            res = telephony.set_contact(name=c_name, phone=c_phone, alias=c_name.lower())
+            return CommandResponse(text=res["message"], success=res["success"], action_type="info", metadata=res)
+
+        # 18. Direct application launcher commands (e.g., 'Open Notepad', 'Open Chrome', 'notepad')
         explicit_launch = re.match(r"^(?:open|launch|start|run)\s+(.+)$", cmd, re.IGNORECASE)
         if explicit_launch:
             app_target = explicit_launch.group(1).strip()
