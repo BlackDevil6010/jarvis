@@ -257,3 +257,29 @@ def test_command_processor_direct_directives(test_db):
         assert "MOBILE COMPANION ONLINE" in res_phone.text
         if processor.tool_registry._mobile_server:
             processor.tool_registry._mobile_server.stop()
+
+
+def test_universal_app_launching_all_categories(test_db):
+    """Verify AppLauncher can resolve and launch apps across Win32, UWP, and protocols."""
+    launcher = AppLauncher(db=test_db)
+
+    with patch("os.startfile") as mock_startfile:
+        # 1. WhatsApp Desktop / UWP
+        res_wa = launcher.launch("whatsapp")
+        assert res_wa.success is True
+        assert "whatsapp" in res_wa.message.lower()
+
+        # 2. Windows Settings (ms-settings:)
+        res_set = launcher.launch("settings")
+        assert res_set.success is True
+        assert "settings" in res_set.message.lower()
+
+        # 3. VLC Media Player
+        res_vlc = launcher.launch("vlc")
+        assert res_vlc.success is True
+        assert "vlc" in res_vlc.message.lower()
+
+        # 4. Control Panel
+        res_cp = launcher.launch("control panel")
+        assert res_cp.success is True
+        assert "control" in res_cp.message.lower()

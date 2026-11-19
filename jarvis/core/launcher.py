@@ -120,12 +120,16 @@ class AppLauncher:
             cmd = [resolved_path]
             if app["args"]:
                 cmd.extend(app["args"].split())
-
             return self._spawn_process(cmd, app["name"])
 
         # 2. Query General Windows Application Discovery
         discovered, candidates, suggestion_website = self.discovery.resolve_application(app_query)
-        if candidates:
+        if discovered:
+            res = self._launch_discovered(discovered)
+            if res.success:
+                return res
+
+        if candidates and not discovered:
             cand_names = ", ".join([f"'{c.name}'" for c in candidates])
             return LaunchResult(
                 success=False,
@@ -133,10 +137,12 @@ class AppLauncher:
                 app_name=app_query
             )
 
-        if discovered:
-            return self._launch_discovered(discovered)
+        # 3. Deep System Fallback Waterfall (System32, PATH, ShellExecute, common aliases)
+        fallback_res = self._fallback_system_launch(app_query)
+        if fallback_res and fallback_res.success:
+            return fallback_res
 
-        # 3. Not found anywhere
+        # 4. Not found anywhere
         if suggestion_website:
             return LaunchResult(
                 success=False,
@@ -153,11 +159,130 @@ class AppLauncher:
             app_name=app_query
         )
 
+    def _fallback_system_launch(self, app_query: str) -> Optional[LaunchResult]:
+        """
+        Deep fallback system launcher trying known executables, Windows PATH,
+        and Windows ShellExecute before giving up.
+        """
+        clean_q = app_query.strip().lower()
+        if not clean_q:
+            return None
+
+        # 1. Known Windows application and system tool alias dictionary
+        SYSTEM_APP_MAP = {
+            "settings": ("ms-settings:", True),
+            "windows settings": ("ms-settings:", True),
+            "pc settings": ("ms-settings:", True),
+            "system settings": ("ms-settings:", True),
+            "whatsapp": ("whatsapp:", True),
+            "telegram": ("tg:", True),
+            "spotify": ("spotify:", True),
+            "discord": ("discord:", True),
+            "steam": ("steam:", True),
+            "word": ("winword.exe", False),
+            "microsoft word": ("winword.exe", False),
+            "excel": ("excel.exe", False),
+            "microsoft excel": ("excel.exe", False),
+            "powerpoint": ("powerpnt.exe", False),
+            "microsoft powerpoint": ("powerpnt.exe", False),
+            "access": ("msaccess.exe", False),
+            "control": ("control.exe", False),
+            "control panel": ("control.exe", False),
+            "calc": ("calc.exe", False),
+            "calculator": ("calc.exe", False),
+            "paint": ("mspaint.exe", False),
+            "terminal": ("wt.exe", False),
+            "windows terminal": ("wt.exe", False),
+            "cmd": ("cmd.exe", False),
+            "command prompt": ("cmd.exe", False),
+            "powershell": ("powershell.exe", False),
+            "explorer": ("explorer.exe", False),
+            "file explorer": ("explorer.exe", False),
+            "my computer": ("explorer.exe", False),
+            "this pc": ("explorer.exe", False),
+            "task manager": ("taskmgr.exe", False),
+            "taskmgr": ("taskmgr.exe", False),
+            "regedit": ("regedit.exe", False),
+            "registry editor": ("regedit.exe", False),
+            "snippingtool": ("snippingtool.exe", False),
+            "snipping tool": ("snippingtool.exe", False),
+            "snip": ("snippingtool.exe", False),
+            "cleanmgr": ("cleanmgr.exe", False),
+            "disk cleanup": ("cleanmgr.exe", False),
+            "camera": ("microsoft.windows.camera:", True),
+            "photos": ("ms-photos:", True),
+            "clock": ("ms-clock:", True),
+            "alarms": ("ms-clock:", True),
+            "store": ("ms-windows-store:", True),
+            "microsoft store": ("ms-windows-store:", True),
+            "weather": ("msnweather:", True),
+            "vlc": ("vlc.exe", False),
+            "brave": ("brave.exe", False),
+            "chrome": ("chrome.exe", False),
+            "edge": ("msedge.exe", False),
+            "firefox": ("firefox.exe", False),
+        }
+
+        if clean_q in SYSTEM_APP_MAP:
+            target, is_proto = SYSTEM_APP_MAP[clean_q]
+            try:
+                if is_proto:
+                    os.startfile(target)
+                    return LaunchResult(
+                        success=True,
+                        message=f"Opened {app_query.title()} successfully via system protocol.",
+                        app_name=app_query
+                    )
+                else:
+                    resolved = self.resolve_executable_path(target)
+                    if resolved:
+                        return self._spawn_process([resolved], app_query.title())
+                    os.startfile(target)
+                    return LaunchResult(
+                        success=True,
+                        message=f"Opened {app_query.title()} successfully.",
+                        app_name=app_query
+                    )
+            except Exception:
+                pass
+
+        # 2. Check shutil.which directly for clean_q or clean_q.exe
+        in_path = shutil.which(clean_q) or shutil.which(f"{clean_q}.exe")
+        if in_path:
+            return self._spawn_process([in_path], app_query)
+
+        # 3. Check resolved executable path
+        resolved = self.resolve_executable_path(clean_q)
+        if resolved:
+            return self._spawn_process([resolved], app_query)
+
+        # 4. Try native Windows ShellExecute
+        try:
+            os.startfile(clean_q)
+            return LaunchResult(
+                success=True,
+                message=f"Opened {app_query} successfully via Windows Shell.",
+                app_name=app_query
+            )
+        except Exception:
+            pass
+
+        return None
+
     def _launch_discovered(self, app: DiscoveredApp) -> LaunchResult:
         """Safely launch an application discovered on the Windows system."""
         try:
-            # Protocol URI (e.g., spotify:, discord:, steam:, calc:)
-            if app.is_protocol:
+            # shell:AppsFolder target (Modern Windows Store / UWP / Package Apps)
+            if app.target.startswith("shell:AppsFolder\\") or app.target.startswith("shell:"):
+                os.startfile(app.target)
+                return LaunchResult(
+                    success=True,
+                    message=f"Opened {app.name} successfully via Windows Shell.",
+                    app_name=app.name
+                )
+
+            # Protocol URI (e.g., spotify:, discord:, steam:, calc:, whatsapp:, ms-settings:)
+            if app.is_protocol or app.target.endswith(":"):
                 os.startfile(app.target)
                 return LaunchResult(
                     success=True,

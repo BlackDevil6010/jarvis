@@ -51,21 +51,36 @@ class DiscoveredApp:
         if q == self.clean_name or q in self.aliases:
             return 1.0
 
+        # Penalty for auxiliary/helper names
+        penalty = 0.0
+        if any(h in self.clean_name for h in ["reset preferences", "cache files", "skinned", "uninstall", "setup", "documentation", "readme", "manual"]):
+            penalty = 0.35
+
         # Substring / word boundary matches
         if q in self.clean_name:
-            # Prefer queries that match beginning of name
-            if self.clean_name.startswith(q):
-                return 0.95
-            return 0.85
+            words = self.clean_name.split()
+            if q in words:
+                score = 0.98 - penalty
+            elif self.clean_name.startswith(q):
+                score = 0.95 - penalty
+            else:
+                score = 0.85 - penalty
+            len_diff = len(self.clean_name) - len(q)
+            if len_diff > 15:
+                score -= min(0.1, len_diff * 0.005)
+            return max(0.0, score)
 
         for alias in self.aliases:
             if q in alias:
-                return 0.90 if alias.startswith(q) else 0.80
+                alias_words = alias.split()
+                if q in alias_words or alias.startswith(q):
+                    return max(0.0, 0.92 - penalty)
+                return max(0.0, 0.82 - penalty)
 
         # Fuzzy string similarity
         name_ratio = difflib.SequenceMatcher(None, q, self.clean_name).ratio()
         alias_ratios = [difflib.SequenceMatcher(None, q, a).ratio() for a in self.aliases]
-        best_ratio = max([name_ratio] + alias_ratios)
+        best_ratio = max([name_ratio] + alias_ratios) - penalty
 
         return best_ratio if best_ratio >= 0.65 else 0.0
 
@@ -108,27 +123,102 @@ COMMON_PROTOCOLS: Dict[str, Dict[str, Any]] = {
         "uri": "ms-settings:",
         "website": "",
         "category": "system",
-        "aliases": ["windows settings", "system settings", "pc settings", "preferences"]
+        "aliases": ["windows settings", "system settings", "pc settings", "preferences", "control settings"]
     },
     "calculator": {
         "uri": "calc:",
         "website": "",
         "category": "productivity",
-        "aliases": ["calc", "math"]
+        "aliases": ["calc", "math", "calculator app"]
+    },
+    "whatsapp": {
+        "uri": "whatsapp:",
+        "website": "https://web.whatsapp.com",
+        "category": "communication",
+        "aliases": ["whatsapp", "wa", "whatsapp desktop", "whatsapp messenger"]
+    },
+    "telegram": {
+        "uri": "tg:",
+        "website": "https://web.telegram.org",
+        "category": "communication",
+        "aliases": ["telegram", "tg", "telegram desktop"]
+    },
+    "slack": {
+        "uri": "slack:",
+        "website": "https://slack.com",
+        "category": "communication",
+        "aliases": ["slack", "slack app"]
+    },
+    "zoom": {
+        "uri": "zoommtg:",
+        "website": "https://zoom.us",
+        "category": "communication",
+        "aliases": ["zoom", "zoom meeting", "zoom call"]
+    },
+    "teams": {
+        "uri": "msteams:",
+        "website": "https://teams.microsoft.com",
+        "category": "communication",
+        "aliases": ["teams", "microsoft teams"]
+    },
+    "skype": {
+        "uri": "skype:",
+        "website": "https://skype.com",
+        "category": "communication",
+        "aliases": ["skype"]
+    },
+    "camera": {
+        "uri": "microsoft.windows.camera:",
+        "website": "",
+        "category": "media",
+        "aliases": ["camera", "webcam"]
+    },
+    "photos": {
+        "uri": "ms-photos:",
+        "website": "",
+        "category": "media",
+        "aliases": ["photos", "pictures", "image viewer"]
+    },
+    "clock": {
+        "uri": "ms-clock:",
+        "website": "",
+        "category": "productivity",
+        "aliases": ["clock", "alarms", "stopwatch", "timer app"]
+    },
+    "weather": {
+        "uri": "msnweather:",
+        "website": "",
+        "category": "information",
+        "aliases": ["weather", "forecast", "live weather"]
+    },
+    "store": {
+        "uri": "ms-windows-store:",
+        "website": "",
+        "category": "system",
+        "aliases": ["store", "microsoft store", "app store", "windows store"]
+    },
+    "mail": {
+        "uri": "outlookmail:",
+        "website": "",
+        "category": "productivity",
+        "aliases": ["mail", "windows mail", "email client"]
     }
 }
 
 # Generic Category Aliases mapped to intended application concepts
 CATEGORY_INTENT_MAP: Dict[str, List[str]] = {
-    "code editor": ["visual studio code", "vscode", "code", "notepad++", "sublime text", "pycharm", "cursor", "idle"],
+    "code editor": ["visual studio code", "vscode", "code", "cursor", "sublime text", "pycharm", "notepad++", "idle"],
     "editor": ["visual studio code", "notepad", "notepad++"],
-    "browser": ["google chrome", "microsoft edge", "firefox", "brave", "opera"],
+    "browser": ["google chrome", "microsoft edge", "brave", "firefox", "opera"],
     "music": ["spotify", "apple music", "youtube music", "windows media player", "vlc"],
-    "media player": ["vlc media player", "windows media player", "spotify", "potplayer"],
-    "terminal": ["command prompt", "powershell", "windows terminal", "cmd"],
+    "media player": ["vlc media player", "vlc", "windows media player", "spotify", "potplayer"],
+    "terminal": ["windows terminal", "command prompt", "powershell", "cmd", "wt"],
     "notes": ["notepad", "onenote", "obsidian", "notion"],
     "documents": ["microsoft word", "word", "libreoffice writer", "adobe acrobat", "acrobat"],
     "sheets": ["microsoft excel", "excel", "libreoffice calc"],
+    "slides": ["microsoft powerpoint", "powerpoint", "presentation"],
+    "whatsapp": ["whatsapp", "whatsapp desktop"],
+    "telegram": ["telegram", "telegram desktop"],
 }
 
 
@@ -143,7 +233,42 @@ class AppDiscovery:
         """Scan system directories and registries to build application index."""
         apps: Dict[str, DiscoveredApp] = {}
 
-        # 1. Start Menu Shortcuts (.lnk files)
+        # 1. Query Windows Installed Applications (Win32 & Modern UWP Store Apps via StartApps)
+        try:
+            import json
+            cmd = ["powershell", "-NoProfile", "-NonInteractive", "-Command", "Get-StartApps | ConvertTo-Json -Compress"]
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=3.5)
+            if proc.returncode == 0 and proc.stdout.strip():
+                start_apps_data = json.loads(proc.stdout)
+                if isinstance(start_apps_data, dict):
+                    start_apps_data = [start_apps_data]
+                for item in start_apps_data:
+                    raw_name = str(item.get("Name", "")).strip()
+                    app_id = str(item.get("AppID", "")).strip()
+                    if not raw_name or not app_id:
+                        continue
+                    lower_name = raw_name.lower()
+                    # Filter out helper shortcuts and uninstallers
+                    if any(x in lower_name for x in ["uninstall", "setup", "install", "documentation", "readme", "reset preferences", "release notes"]):
+                        continue
+
+                    # If app_id is an existing local file path ending with .exe
+                    if Path(app_id).is_absolute() and Path(app_id).exists():
+                        target = str(Path(app_id).resolve())
+                    else:
+                        target = f"shell:AppsFolder\\{app_id}"
+
+                    if lower_name not in apps:
+                        apps[lower_name] = DiscoveredApp(
+                            name=raw_name,
+                            target=target,
+                            source="start_apps",
+                            aliases=self._generate_aliases(raw_name)
+                        )
+        except Exception as exc:
+            logger.debug(f"Get-StartApps query skipped/failed: {exc}")
+
+        # 2. Start Menu Shortcuts (.lnk files)
         start_menu_dirs = [
             Path(os.environ.get("ProgramData", r"C:\ProgramData")) / "Microsoft" / "Windows" / "Start Menu" / "Programs",
             Path(os.environ.get("APPDATA", "")) / "Microsoft" / "Windows" / "Start Menu" / "Programs",
@@ -167,7 +292,7 @@ class AppDiscovery:
                 except Exception as exc:
                     logger.debug(f"Error scanning Start Menu at {sm_dir}: {exc}")
 
-        # 2. Windows App Paths Registry (HKCU and HKLM)
+        # 3. Windows App Paths Registry (HKCU and HKLM)
         for hkey in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
             try:
                 with winreg.OpenKey(hkey, r"Software\Microsoft\Windows\CurrentVersion\App Paths") as root_key:
@@ -195,7 +320,7 @@ class AppDiscovery:
             except OSError:
                 continue
 
-        # 3. Add Known Protocol Applications
+        # 4. Add Known Protocol Applications
         for name, proto_info in COMMON_PROTOCOLS.items():
             if name not in apps:
                 apps[name] = DiscoveredApp(
@@ -241,9 +366,27 @@ class AppDiscovery:
         elif "obs studio" in name_lower or "obs" in name_lower:
             aliases.extend(["recorder", "screen recorder", "streaming software"])
         elif "word" in name_lower and "pad" not in name_lower:
-            aliases.extend(["word processor", "docs", "document editor"])
+            aliases.extend(["word processor", "docs", "document editor", "microsoft word", "word"])
         elif "excel" in name_lower:
-            aliases.extend(["spreadsheet", "sheets", "workbook"])
+            aliases.extend(["spreadsheet", "sheets", "workbook", "microsoft excel", "excel"])
+        elif "powerpoint" in name_lower:
+            aliases.extend(["powerpoint", "ppt", "slides", "microsoft powerpoint"])
+        elif "vlc" in name_lower:
+            aliases.extend(["vlc", "vlc player", "vlc media player", "media player"])
+        elif "whatsapp" in name_lower:
+            aliases.extend(["whatsapp", "wa", "whatsapp desktop", "whatsapp messenger"])
+        elif "telegram" in name_lower:
+            aliases.extend(["telegram", "tg", "telegram desktop"])
+        elif "camera" in name_lower:
+            aliases.extend(["camera", "webcam"])
+        elif "clock" in name_lower:
+            aliases.extend(["clock", "alarms", "timer"])
+        elif "settings" in name_lower:
+            aliases.extend(["settings", "windows settings", "system settings", "pc settings"])
+        elif "claude" in name_lower:
+            aliases.extend(["claude", "claude ai", "claude desktop"])
+        elif "bluestacks" in name_lower:
+            aliases.extend(["bluestacks", "bluestacks 5", "emulator", "android emulator"])
 
         # Strip vendor prefix: e.g. "Google Chrome" -> "Chrome", "Microsoft Edge" -> "Edge"
         for vendor in ["google ", "microsoft ", "adobe ", "apple ", "mozilla "]:
@@ -303,15 +446,18 @@ class AppDiscovery:
                     return None, [], proto_info["website"]
             return None, [], None
 
-        # Check for ambiguity: if top 2 matches have very close scores (>0.85) and different roots
+        # Check for ambiguity: only if top 2 matches have very close scores and neither matches query prefix/word
         if len(matches) > 1:
             top_app, top_score = matches[0]
             second_app, second_score = matches[1]
             if top_score >= 0.85 and second_score >= 0.85 and top_app.name.lower() != second_app.name.lower():
-                # If they are very close, return them as candidates for disambiguation
-                if abs(top_score - second_score) < 0.05 and top_app.clean_name != query.lower():
-                    candidates = [m[0] for m in matches[:3]]
-                    return None, candidates, None
+                q_clean = query.lower().strip()
+                top_words = top_app.clean_name.split()
+                # If top_app starts with query or query is one of its main words, top_app is the clear winner
+                if q_clean not in top_words and not top_app.clean_name.startswith(q_clean) and not any(q_clean == a for a in top_app.aliases):
+                    if abs(top_score - second_score) < 0.05:
+                        candidates = [m[0] for m in matches[:3]]
+                        return None, candidates, None
 
         return matches[0][0], [m[0] for m in matches[1:4]], None
 
